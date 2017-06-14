@@ -35,10 +35,6 @@ class WrappedJucFuture[T](delegate: java.util.concurrent.Future[T]) extends (() 
   def apply() = delegate.get()
 }
 
-/** Future accessor using a scala.actors future */
-object ActorsFuture extends Futures {
-  def future[T](result: => T) = scala.actors.Futures.future(result)
-}
 
 trait StoppableFuture[T] extends (() => T) {
   def isSet: Boolean

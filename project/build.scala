@@ -5,29 +5,22 @@ object Dispatch extends Build {
   val shared = Defaults.defaultSettings ++ ls.Plugin.lsSettings ++ Seq(
     organization := "net.databinder",
     version := "0.8.10",
-    scalaVersion := "2.10.4",
+    scalaVersion := "2.12.2",
     parallelExecution in Test := false,
     testOptions in Test += Tests.Argument(TestFrameworks.Specs2, "sequential", "true"),
     scalacOptions ++= "-deprecation" :: Nil,
     crossScalaVersions :=
-      Seq("2.9.0", "2.9.0-1", "2.9.1", "2.9.1-1", "2.9.2", "2.9.3", "2.10.4", "2.11.1"),
+      Seq("2.11.11", "2.12.2"),
     libraryDependencies <++= (scalaVersion) { sv => Seq(
       sv.split("[.-]").toList match {
         case "2" :: "9" :: _ =>
           "org.specs2" % "specs2_2.9.2" % "1.12.4" % "test"
         case _ =>
-          "org.specs2" %% "specs2" % "2.3.12" % "test"
+          "org.specs2" %% "specs2" % "2.4.17" % "test"
       })
     },
     publishMavenStyle := true,
-    publishTo <<= version { (v: String) =>
-      val nexus = "https://oss.sonatype.org/"
-      if (v.trim.endsWith("SNAPSHOT")) 
-        Some("snapshots" at nexus + "content/repositories/snapshots") 
-      else
-        Some("releases"  at nexus + "service/local/staging/deploy/maven2")
-    },
-    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+
     homepage :=
       Some(new java.net.URL("http://dispatch-classic.databinder.net/")),
     publishArtifact in Test := false,
@@ -47,26 +40,25 @@ object Dispatch extends Build {
   )
   val httpShared = shared ++ Seq(
     libraryDependencies +=
-      "org.apache.httpcomponents" % "httpclient" % "4.1.3"
+      "org.apache.httpcomponents" % "httpclient" % "4.5.3"
   )
   lazy val dispatch =
     Project("Dispatch", file("."), settings = shared ++ Seq(
       sources in (Compile, doc) <<=
         (thisProjectRef, buildStructure) flatMap (aggregateTask(sources)),
-      dependencyClasspath in (Compile, doc) <<= 
+      dependencyClasspath in (Compile, doc) <<=
         (thisProjectRef, buildStructure) flatMap
           aggregateTask(dependencyClasspath),
       ls.Plugin.LsKeys.skipWrite := true
     )) aggregate(
-      futures, core, http, nio, mime, json, http_json, oauth, gae, tagsoup, 
+      futures, core, http, nio, mime, json, http_json, oauth, tagsoup,
       jsoup
     )
   lazy val futures =
     Project("dispatch-futures", file("futures"), settings = shared ++ Seq(
       description := "Common interface to Java and Scala futures",
       // https://github.com/harrah/xsbt/issues/85#issuecomment-1687483
-      unmanagedClasspath in Compile += Attributed.blank(new java.io.File("doesnotexist")),
-      actorsDependency
+      unmanagedClasspath in Compile += Attributed.blank(new java.io.File("doesnotexist"))
     ))
   lazy val core =
     Project("dispatch-core", file("core"), settings = httpShared ++ Seq(
@@ -84,13 +76,7 @@ object Dispatch extends Build {
       }
     )) dependsOn(
       core, futures)
-  lazy val gae =
-    Project("dispatch-gae", file("http-gae"), settings = httpShared ++ Seq(
-      description :=
-        "Executor with a modified Apache HttpClient for Google App Engine",
-      libraryDependencies +=
-        "com.google.appengine" % "appengine-api-1.0-sdk" % "1.5.5"
-    )) dependsOn(http)
+
   lazy val nio =
     Project("dispatch-nio", file("nio"), settings = httpShared ++ Seq(
       description :=
@@ -103,11 +89,10 @@ object Dispatch extends Build {
       description :=
         "Support for multipart MIME POSTs",
       libraryDependencies ++= Seq(
-        "org.apache.httpcomponents" % "httpmime" % "4.1.2" intransitive(),
-        "commons-logging" % "commons-logging" % "1.1.1",
-        "org.apache.james" % "apache-mime4j-core" % "0.7.2"
-      ),
-      actorsDependency
+        "org.apache.httpcomponents" % "httpmime" % "4.5.3" intransitive(),
+        "commons-logging" % "commons-logging" % "1.2",
+        "org.apache.james" % "apache-mime4j-core" % "0.8.0"
+      )
     )) dependsOn(core)
   lazy val json =
     Project("dispatch-json", file("json"), settings = shared ++ Seq(
@@ -142,7 +127,7 @@ object Dispatch extends Build {
     Project("dispatch-jsoup", file("jsoup"), settings = httpShared ++ Seq(
       description := "Adds JSoup handler verbs to Dispatch",
       libraryDependencies ++= Seq(
-        "org.jsoup" % "jsoup" % "1.6.1",
+        "org.jsoup" % "jsoup" % "1.10.3",
         "org.eclipse.jetty.aggregate" % "jetty-server" % "7.5.4.v20111024" % "test"
       )
     )) dependsOn(core, http)
@@ -162,25 +147,18 @@ object Dispatch extends Build {
     ).join.map(_.flatten)
   }
 
-  lazy val actorsDependency = libraryDependencies <<= (libraryDependencies, scalaVersion){
-    (dependencies, scalaVersion) =>
-      if(scalaVersion.startsWith("2.10") || scalaVersion.startsWith("2.11"))
-        ("org.scala-lang" % "scala-actors" % scalaVersion) +: dependencies
-      else
-        dependencies
-    }
 
   lazy val xmlDependency = libraryDependencies <<= (libraryDependencies, scalaVersion){
     (dependencies, scalaVersion) =>
-      if(scalaVersion.startsWith("2.11"))
-        ("org.scala-lang.modules" %% "scala-xml" % "1.0.1") +: dependencies
+      if(scalaVersion.startsWith("2.11") || scalaVersion.startsWith("2.12"))
+        ("org.scala-lang.modules" %% "scala-xml" % "1.0.6") +: dependencies
       else
         dependencies
     }
   lazy val parserDependency = libraryDependencies <<= (libraryDependencies, scalaVersion){
     (dependencies, scalaVersion) =>
-      if(scalaVersion.startsWith("2.11"))
-        ("org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.1") +: dependencies
+      if(scalaVersion.startsWith("2.11") || scalaVersion.startsWith("2.12"))
+        ("org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.6") +: dependencies
       else
         dependencies
     }
