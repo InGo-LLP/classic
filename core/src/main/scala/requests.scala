@@ -8,7 +8,7 @@ import java.net.URI
 
 object Request extends Encoders
     with ImplicitRequestVerbs
-    with ImplicitHandlerVerbs 
+    with ImplicitHandlerVerbs
     with ImplicitCallbackVerbs {
   /** Dispatch's factory-default charset, utf-8 */
   val factoryCharset = org.apache.http.protocol.HTTP.UTF_8
@@ -28,8 +28,8 @@ object Request extends Encoders
 
 /** Request descriptor, possibly contains a host, credentials, and a list of transformation functions. */
 class Request(
-  val host: HttpHost, 
-  val creds: Option[Credentials], 
+  val host: HttpHost,
+  val creds: Option[Credentials],
   val method: String,
   val path: String,
   val headers: Request.Headers,
@@ -40,7 +40,7 @@ class Request(
   def this(str: String) = {
     this(Request.to_host(str), None, "GET", Request.to_path(str), Nil, None, Request.factoryCharset)
   }
-  
+
   /** Construct with host only. */
   def this(host: HttpHost) = this(host, None, "GET", "/", Nil, None, Request.factoryCharset)
 
@@ -49,8 +49,8 @@ class Request(
     this(req.host, req.creds, req.method, req.path, req.headers, req.body, req.defaultCharset)
 
   def copy(
-    host: HttpHost = host, 
-    creds: Option[Credentials] = creds, 
+    host: HttpHost = host,
+    creds: Option[Credentials] = creds,
     method: String = method,
     path: String = path,
     headers: Request.Headers = headers,
@@ -68,7 +68,7 @@ trait Encoders {
   /** @return %-decoded string e.g. from query string or form body */
   def decode_% (s: String) = java.net.URLDecoder.decode(s, defaultCharset)
 
-  def encode_base64(b: Array[Byte]) = 
+  def encode_base64(b: Array[Byte]) =
     org.apache.commons.codec.binary.Base64.encodeBase64(b)
 
   /** @return formatted and %-encoded query string, e.g. name=value&name2=value2 */
@@ -86,10 +86,10 @@ trait ImplicitRequestVerbs {
 
 /** These functions create new request descriptors based off of the current one.
     Most are intended to be used as infix operators; those that don't take a parameter
-    have character names to be used with dot notation, e.g. 
+    have character names to be used with dot notation, e.g.
     :/("example.com").HEAD.secure >>> {...} */
 class RequestVerbs(subject: Request) {
-  
+
   /** Set credentials that may be used for basic or digest auth; requires a host value :/(...) upon execution. */
   def as (name: String, pass: String) = subject.copy(creds=Some(Credentials(name, pass)))
 
@@ -101,16 +101,16 @@ class RequestVerbs(subject: Request) {
       ))
     ))
   }
-  
+
   /** Convert this to a secure (scheme https) request if not already */
   def secure = subject.copy(
     // default port -1 works for either
     host=new HttpHost(subject.host.getHostName, subject.host.getPort, "https")
   )
-  
+
   /** Combine this request with another. */
   def <& (req: Request) = new Request(
-    if (req.host.getHostName.isEmpty) subject.host else req.host, 
+    if (req.host.getHostName.isEmpty) subject.host else req.host,
     req.creds orElse subject.creds,
     req.method,
     (subject.path, req.path) match {
@@ -122,14 +122,14 @@ class RequestVerbs(subject: Request) {
     req.body orElse subject.body,
     if (Request.factoryCharset == req.defaultCharset) subject.defaultCharset else req.defaultCharset
   )
-  
+
   /** Set the default character set to be used when processing the request in <<, <<<, Handler#>> and
     derived operations >~, as_str, etc. (The 'factory' default is utf-8.) */
   def >\ (charset: String) = subject.copy(defaultCharset=charset)
-  
+
   /** Combine this request with another handler. */
   def >& [T] (other: Handler[T]) = Handler(this <& other.request, other.block)
-  
+
   /** Append an element to this request's path, joins with '/'. (mutates request) */
   def / (path: String) = subject.copy(
     path= (subject.path, path) match {
@@ -137,7 +137,7 @@ class RequestVerbs(subject: Request) {
       case (a, b) => a + "/" + b
     }
   )
-  
+
   /** Add headers to this request. (mutates request) */
   def <:< (values: Map[String, String]) = subject.copy(
     headers=values.toList ::: subject.headers
@@ -173,7 +173,7 @@ class RequestVerbs(subject: Request) {
     "application/x-www-form-urlencoded",
     subject.defaultCharset
   ) with FormEntity {
-    def add(values: Traversable[(String, String)]) = 
+    def add(values: Traversable[(String, String)]) =
       new UrlEncodedFormEntity(oauth_params ++ values)
   }
 
@@ -198,7 +198,7 @@ class RequestVerbs(subject: Request) {
   def << (contents: Array[Byte]): Request = POST.copy(
     body=Some(new ByteArrayEntity(contents))
   )
-  
+
   /** Add query parameters. (mutates request) */
   def <<? (values: Traversable[(String, String)]) =
     if (values.isEmpty) subject
@@ -209,21 +209,23 @@ class RequestVerbs(subject: Request) {
           if (values.isEmpty) "" else "?" + subject.form_enc(values)
         )
     )
-  
+
   /** HTTP post request. */
   def POST = this << Map.empty
 
   /** HTTP put request. */
   def PUT = subject.copy(method="PUT")
-    
+
   /** HTTP delete request. */
   def DELETE = subject.copy(method="DELETE")
-  
+
   /** HTTP head request. See >:> to access headers. */
   def HEAD = subject.copy(method="HEAD")
 
   /** HTTP options request. */
   def OPTIONS = subject.copy(method="OPTIONS")
+
+  def PATCH = subject.copy(method="PATCH")
 
   /** @return URI based on this request, e.g. if needed outside Disptach. */
   def to_uri = URI.create(subject.host.toURI).resolve(subject.path)
@@ -251,7 +253,7 @@ object url extends (String => Request) {
  * hostname. See the `url` function for requests based on a URL. */
 object :/ {
   /* Creates requests for a hostname and port */
-  def apply(hostname: String, port: Int): Request = 
+  def apply(hostname: String, port: Int): Request =
     new Request(new HttpHost(hostname, port))
 
   /* Creates requests for a hostname and default port */
@@ -273,7 +275,7 @@ object Builder {
 }
 
 /** Extension of StringEntity that keeps a reference to the string */
-class RefStringEntity(val string: String, 
-                      contentType: String, 
-                      val charset: String) extends 
+class RefStringEntity(val string: String,
+                      contentType: String,
+                      val charset: String) extends
   StringEntity(string, contentType, charset)
