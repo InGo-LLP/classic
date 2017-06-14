@@ -20,11 +20,10 @@ object Dispatch extends Build {
       })
     },
     publishMavenStyle := true,
-
     homepage :=
       Some(new java.net.URL("http://dispatch-classic.databinder.net/")),
     publishArtifact in Test := false,
-    licenses := Seq("LGPL v3" -> url("http://www.gnu.org/licenses/lgpl.txt")),
+    licenses := Seq("LGPL 3.0" -> url("http://www.gnu.org/licenses/lgpl.txt")),
     pomExtra := (
       <scm>
         <url>git@github.com:dispatch/reboot.git</url>
