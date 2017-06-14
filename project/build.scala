@@ -4,7 +4,7 @@ import Keys._
 object Dispatch extends Build {
   val shared = Defaults.defaultSettings ++ ls.Plugin.lsSettings ++ Seq(
     organization := "net.databinder",
-    version := "0.8.10",
+    version := "0.8.10-ingo1",
     scalaVersion := "2.12.2",
     parallelExecution in Test := false,
     testOptions in Test += Tests.Argument(TestFrameworks.Specs2, "sequential", "true"),
