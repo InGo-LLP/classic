@@ -2,23 +2,26 @@ package dispatch.classic
 
 import org.apache.http.{HttpHost,HttpRequest,HttpResponse,HttpEntity}
 import org.apache.http.message.AbstractHttpMessage
+import java.util.zip.GZIPInputStream
 import org.apache.http.util.EntityUtils
+import org.apache.http.entity.ContentType
+import scala.io.Source
 import org.apache.http.client.methods._
 
 /** Defines request execution and response status code behaviors. Implemented methods are finalized
-    as any overrides would be lost when instantiating delegate executors, is in Threads#future. 
+    as any overrides would be lost when instantiating delegate executors, is in Threads#future.
     Delegates should chain to parent `pack` and `execute` implementations. */
 trait HttpExecutor extends RequestLogging {
   /** Type of value returned from request execution */
   type HttpPackage[T]
   /** Execute the request against an HttpClient */
-  def execute[T](host: HttpHost, 
-                 creds: Option[Credentials], 
-                 req: HttpRequestBase, 
+  def execute[T](host: HttpHost,
+                 creds: Option[Credentials],
+                 req: HttpRequestBase,
                  block: HttpResponse => T,
                  listener: ExceptionListener): HttpPackage[T]
 
-  def executeWithCallback[T](host: HttpHost, credsopt: Option[Credentials], 
+  def executeWithCallback[T](host: HttpHost, credsopt: Option[Credentials],
                              req: HttpRequestBase, block: Callback[T]): HttpPackage[T]
 
   @deprecated("Use x[T](hand: Handler[T]) instead. Construct a Handler if needed.", "0.8.0")
@@ -46,17 +49,28 @@ trait HttpExecutor extends RequestLogging {
   /** Allow executor to release any resources for an entity */
   def consumeContent(entity: Option[HttpEntity]): Unit
   /** Apply Response Handler if reponse code returns true from chk. */
-  final def when[T](chk: Int => Boolean)(hand: Handler[T]) = 
+  final def when[T](chk: Int => Boolean)(hand: Handler[T]) =
     x(hand.copy(block= {
       case (code, res, ent) if chk(code) => hand.block(code, res, ent)
-      case (code, _, Some(ent)) => 
-        throw StatusCode(code, EntityUtils.toString(ent, hand.request.defaultCharset))
-      case (code, _, _)         => 
+      case (code, _, Some(ent)) =>
+        val stm = (ent.getContent, ent.getContentEncoding) match {
+          case (stm, null)                          => stm
+          case (stm, enc) if enc.getValue == "gzip" => new GZIPInputStream(stm)
+          case (stm, _)                             => stm
+        }
+        val charset = ContentType.getOrDefault(ent).getCharset match {
+          case null    => hand.request.defaultCharset
+          case charset => charset.name
+        }
+        val body = Source.fromInputStream(stm, charset).mkString
+        consumeContent(Some(ent))
+        throw StatusCode(code, body)
+      case (code, _, _)         =>
         throw StatusCode(code, "[no entity]")
     }))
-  
+
   /** Apply handler block when response code is 200 - 204 */
-  final def apply[T](hand: Handler[T]): HttpPackage[T] = 
+  final def apply[T](hand: Handler[T]): HttpPackage[T] =
     (this when {code => (200 to 204) contains code})(hand)
 
   def make_message(req: Request) = {
@@ -65,10 +79,11 @@ trait HttpExecutor extends RequestLogging {
       case HttpHead.METHOD_NAME => new HttpHead(req.path)
       case HttpDelete.METHOD_NAME => new HttpDelete(req.path)
       case HttpOptions.METHOD_NAME => new HttpOptions(req.path)
-      case method => 
+      case method =>
         val message = method match {
           case HttpPost.METHOD_NAME => new HttpPost(req.path)
           case HttpPut.METHOD_NAME => new HttpPut(req.path)
+          case HttpPatch.METHOD_NAME => new HttpPatch(req.path)
         }
         req.body.foreach(message.setEntity)
         message
@@ -106,9 +121,9 @@ trait HttpExecutor extends RequestLogging {
 }
 
 trait BlockingCallback { self: HttpExecutor =>
-  def executeWithCallback[T](host: HttpHost, 
-                             credsopt: Option[Credentials], 
-                             req: HttpRequestBase, 
+  def executeWithCallback[T](host: HttpHost,
+                             credsopt: Option[Credentials],
+                             req: HttpRequestBase,
                              callback:  Callback[T]): HttpPackage[T] =
     execute(host, credsopt, req, { res =>
       res.getEntity match {
@@ -140,11 +155,11 @@ trait RequestLogging {
   /** Logger for this executor, logs to console. */
   def make_logger =
     new Logger {
-      def info(msg: String, items: Any*) { 
-        println("INF: [console logger] dispatch: " + 
+      def info(msg: String, items: Any*) {
+        println("INF: [console logger] dispatch: " +
                 msg.format(items: _*))
       }
-      def warn(msg: String, items: Any*) { 
+      def warn(msg: String, items: Any*) {
         println("WARN: [console logger] dispatch: " +
                 msg.format(items: _*))
       }

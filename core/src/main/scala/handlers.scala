@@ -1,8 +1,9 @@
 package dispatch.classic
 
 import org.apache.http.{HttpResponse,HttpEntity}
-import org.apache.http.util.EntityUtils
 import java.util.zip.GZIPInputStream
+import org.apache.http.util.EntityUtils
+import org.apache.http.entity.ContentType
 import java.io.{InputStream,OutputStream,InputStreamReader}
 import javax.xml.parsers.SAXParserFactory
 import scala.io.Source
@@ -10,8 +11,8 @@ import util.control.Exception._
 
 /** Request handler, contains request descriptor and a function to transform the result. */
 case class Handler[T](
-  request: Request, 
-  block: Handler.F[T], 
+  request: Request,
+  block: Handler.F[T],
   listener: ExceptionListener
 ) {
   /** @return new Handler composing after with this Handler's block */
@@ -26,17 +27,17 @@ case class Handler[T](
     })
 }
 
-object Handler { 
+object Handler {
   type F[T] = (Int, HttpResponse, Option[HttpEntity]) => T
   /** Turns a simple entity handler in into a full response handler that fails if no entity */
   def apply[T](req: Request, block: F[T]): Handler[T] = Handler(
     req, block, nothingCatcher)
-  def apply[T](req: Request, block: HttpEntity => T): Handler[T] = 
+  def apply[T](req: Request, block: HttpEntity => T): Handler[T] =
     Handler(req, { (code, res, ent) => ent match {
-      case Some(ent) => block(ent) 
+      case Some(ent) => block(ent)
       case None => sys.error("""
         | Response has no HttpEntity: %s
-        | If no response body is expected, use a handler such as 
+        | If no response body is expected, use a handler such as
         | HandlerVerbs#>| that does not require one.""".stripMargin.format(res))
     } } )
   // retain factory to use with XML.load; its newInstance method is not thread-safe
@@ -70,10 +71,10 @@ class HandlerVerbs(request: Request) {
   } )
   /** Handle InputStream in block, handle gzip if so encoded. */
   def >> [T] (block: InputStream => T): Handler[T] = >> { (stm, charset) => block(stm) }
-  /** Handle response as a scala.io.Source, in a block. Note that Source may fail if the 
+  /** Handle response as a scala.io.Source, in a block. Note that Source may fail if the
       character set it receives (determined in >>) is incorrect. To process resources
       that have incorrect charset headers, use >> ((InputStream, String) => T). */
-  def >~ [T] (block: Source => T) = >> { (stm, charset) => 
+  def >~ [T] (block: Source => T) = >> { (stm, charset) =>
     block(Source.fromInputStream(stm, charset))
   }
   /** Return response as a scala.io.Source. Charset note in >~  applies. */
@@ -83,13 +84,13 @@ class HandlerVerbs(request: Request) {
   /** Return some non-huge response as a String. Charset note in >~  applies.*/
   def as_str = >- { s => s }
   /** Handle response as a java.io.Reader */
-  def >>~ [T] (block: InputStreamReader => T) = >> { (stm, charset) => 
+  def >>~ [T] (block: InputStreamReader => T) = >> { (stm, charset) =>
     block(new InputStreamReader(stm, charset))
   }
   /** Write to the given OutputStream. */
   def >>> [OS <: OutputStream](out: OS) = Handler(request, { ent => ent.writeTo(out); out })
   /** Process response as XML document in block */
-  def <> [T] (block: xml.Elem => T) = >>~ { reader => 
+  def <> [T] (block: xml.Elem => T) = >>~ { reader =>
     block(xml.XML.withSAXParser(Handler.saxParserFactory.newSAXParser).load(reader))
   }
   /** Process header as Map in block. Map returns empty set for header
@@ -157,8 +158,7 @@ class XhtmlHandlerVerbs(request: Request) {
   /** Process response as XHTML document in block, more lenient than <>
    *  but still not great. See the jsoup and tagsoup modules for more
    *  capable html parsers. */
-  def </> [T] (block: xml.NodeSeq => T) = request >~ { src => 
+  def </> [T] (block: xml.NodeSeq => T) = request >~ { src =>
     block(xml.parsing.XhtmlParser(src))
   }
 }
-
